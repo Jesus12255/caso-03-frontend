@@ -1,26 +1,32 @@
 import { useState, useEffect, useCallback } from 'react';
+import { analysisService } from '../services/analysisService';
+import CryptoJS from 'crypto-js';
 
 export function useExtractEditor(initialResults) {
     const [editableResults, setEditableResults] = useState([]);
+    const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'success' | 'error'
 
     useEffect(() => {
         if (initialResults) {
-            // Deep copy to avoid mutating props and ensure local state is fresh
-            // Normalize fields to always be an array for easier rendering/editing
             const initializedResults = initialResults.map(item => {
                 let fields = [];
                 if (Array.isArray(item.fields)) {
                     fields = [...item.fields];
                 } else if (item && typeof item === 'object') {
-                    // Fallback for object-based results
                     fields = Object.entries(item)
-                        .filter(([key]) => !['fileName', 'detectedType', 'confidence', 'id', 'fields'].includes(key))
+                        .filter(([key]) => !['fileName', 'detectedType', 'confidence', 'id', 'fields', 'isEncrypted', 'isAnonymized'].includes(key))
                         .map(([key, value]) => ({
                             label: key.replace(/_/g, ' '),
                             value: typeof value === 'object' ? JSON.stringify(value) : String(value)
                         }));
                 }
-                return { ...item, fields };
+                const isEncrypted = item.isEncrypted || false;
+                return {
+                    ...item,
+                    fields,
+                    isAnonymized: isEncrypted,
+                    isEncrypted
+                };
             });
             setEditableResults(initializedResults);
         }
@@ -29,32 +35,194 @@ export function useExtractEditor(initialResults) {
     const handleValueChange = useCallback((docIndex, fieldIndex, newValue) => {
         setEditableResults(prev => {
             const next = [...prev];
+            if (next[docIndex].isEncrypted) return prev;
+
             const newFields = [...next[docIndex].fields];
             newFields[fieldIndex] = { ...newFields[fieldIndex], value: newValue };
             next[docIndex] = { ...next[docIndex], fields: newFields };
             return next;
         });
+        setSaveStatus('idle');
     }, []);
 
     const handleDeleteField = useCallback((docIndex, fieldIndex) => {
         setEditableResults(prev => {
             const next = [...prev];
+            if (next[docIndex].isEncrypted) return prev;
+
             const newFields = next[docIndex].fields.filter((_, i) => i !== fieldIndex);
             next[docIndex] = { ...next[docIndex], fields: newFields };
             return next;
         });
+        setSaveStatus('idle');
     }, []);
 
-    const handleSave = useCallback(() => {
-        console.log("Saving edited results:", editableResults);
-        // Mock API call
-        alert("¡Datos guardados correctamente!");
+    const handleEncryptDocument = useCallback((docIndex, password) => {
+        return new Promise((resolve, reject) => {
+            const doc = editableResults[docIndex];
+            if (!doc || doc.isEncrypted) {
+                resolve();
+                return;
+            }
+
+            try {
+                console.group(`🔐 Encrypting Document: ${doc.fileName}`);
+                console.log("Original Data:", JSON.parse(JSON.stringify(doc.fields)));
+
+                const encryptedFields = doc.fields.map(field => {
+                    const encryptedValue = CryptoJS.AES.encrypt(field.value, password).toString();
+                    return {
+                        ...field,
+                        value: encryptedValue
+                    };
+                });
+
+                console.log("Encrypted Data:", JSON.parse(JSON.stringify(encryptedFields)));
+                console.groupEnd();
+
+                setEditableResults(prev => {
+                    const next = [...prev];
+                    next[docIndex] = {
+                        ...next[docIndex],
+                        fields: encryptedFields,
+                        isEncrypted: true,
+                        isAnonymized: true
+                    };
+                    return next;
+                });
+                resolve();
+            } catch (e) {
+                console.error("Encryption Failed:", e);
+                reject(e);
+            }
+        });
+    }, [editableResults]);
+
+    const handleDecryptDocument = useCallback((docIndex, password) => {
+        return new Promise((resolve, reject) => {
+            const doc = editableResults[docIndex];
+            if (!doc || !doc.isEncrypted) {
+                resolve();
+                return;
+            }
+
+            try {
+                console.group(`🔓 Decrypting Document: ${doc.fileName}`);
+                console.log("Encrypted Data:", JSON.parse(JSON.stringify(doc.fields)));
+
+                // Dry run decryption
+                const decryptedFields = doc.fields.map(field => {
+                    const bytes = CryptoJS.AES.decrypt(field.value, password);
+                    const val = bytes.toString(CryptoJS.enc.Utf8);
+
+                    if (field.value && !val) {
+                        console.warn(`Failed to decrypt field: ${field.label}`);
+                        throw new Error("Incorrect password");
+                    }
+                    return { ...field, value: val };
+                });
+
+                console.log("Decrypted Data:", JSON.parse(JSON.stringify(decryptedFields)));
+                console.groupEnd();
+
+                setEditableResults(prev => {
+                    const next = [...prev];
+                    next[docIndex] = {
+                        ...next[docIndex],
+                        fields: decryptedFields,
+                        isEncrypted: false,
+                        isAnonymized: false
+                    };
+                    return next;
+                });
+                resolve();
+            } catch (error) {
+                console.error("Decryption Failed:", error.message);
+                reject(error);
+            }
+        });
+    }, [editableResults]);
+
+    const handleGlobalEncryption = useCallback((password, shouldEncrypt) => {
+        return new Promise((resolve, reject) => {
+            try {
+                console.group(shouldEncrypt ? "🔐 Global Encryption" : "🔓 Global Decryption");
+
+                if (!shouldEncrypt) {
+                    for (const doc of editableResults) {
+                        if (doc.isEncrypted) {
+                            for (const field of doc.fields) {
+                                const bytes = CryptoJS.AES.decrypt(field.value, password);
+                                const val = bytes.toString(CryptoJS.enc.Utf8);
+                                if (field.value && !val) {
+                                    console.error("Global Decryption Check Failed: Incorrect password");
+                                    console.groupEnd();
+                                    throw new Error("Incorrect password for one or more documents");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                setEditableResults(prev => {
+                    return prev.map(doc => {
+                        if (shouldEncrypt) {
+                            if (doc.isEncrypted) return doc;
+
+                            console.log(`Encrypting ${doc.fileName}...`);
+                            const encryptedFields = doc.fields.map(field => ({
+                                ...field,
+                                value: CryptoJS.AES.encrypt(field.value, password).toString()
+                            }));
+                            return { ...doc, fields: encryptedFields, isEncrypted: true, isAnonymized: true };
+                        } else {
+                            if (!doc.isEncrypted) return doc;
+
+                            console.log(`Decrypting ${doc.fileName}...`);
+                            const decryptedFields = doc.fields.map(field => ({
+                                ...field,
+                                value: CryptoJS.AES.decrypt(field.value, password).toString(CryptoJS.enc.Utf8)
+                            }));
+                            return { ...doc, fields: decryptedFields, isEncrypted: false, isAnonymized: false };
+                        }
+                    });
+                });
+
+                console.log("Global operation completed successfully.");
+                console.groupEnd();
+                resolve();
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }, [editableResults]);
+
+    const handleSave = useCallback(async (onSuccess) => {
+        setSaveStatus('saving');
+        try {
+            await analysisService.saveAnalysisResults(editableResults);
+            setSaveStatus('success');
+            setTimeout(() => {
+                setSaveStatus('idle');
+                if (onSuccess) onSuccess();
+            }, 2000);
+        } catch (error) {
+            console.error("Save failed:", error);
+            setSaveStatus('error');
+            setTimeout(() => {
+                setSaveStatus('idle');
+            }, 3000);
+        }
     }, [editableResults]);
 
     return {
         editableResults,
+        saveStatus,
         handleValueChange,
         handleDeleteField,
+        handleEncryptDocument,
+        handleDecryptDocument,
+        handleGlobalEncryption,
         handleSave
     };
 }

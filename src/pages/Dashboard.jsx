@@ -12,7 +12,7 @@ export default function Dashboard() {
         analyzeFiles(files);
     };
 
-    // Auto-scroll thinking container
+
     useEffect(() => {
         if (thinkingRef.current) {
             thinkingRef.current.scrollTop = thinkingRef.current.scrollHeight;
@@ -87,7 +87,6 @@ export default function Dashboard() {
                             <div className="absolute inset-0 border-2 border-tivit-red/20 rounded-full border-t-transparent border-l-transparent animate-[spin_3s_linear_infinite]"></div>
                             <div className="absolute inset-4 border border-tivit-red/40 rounded-full border-r-transparent border-b-transparent animate-[spin_2s_reverse_linear_infinite]"></div>
 
-                            {/* Core */}
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="w-16 h-16 bg-tivit-red rounded-full animate-pulse blur-[40px] opacity-40"></div>
                                 <div className="w-2 h-2 bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.8)]"></div>
@@ -99,7 +98,6 @@ export default function Dashboard() {
                             <p className="text-zinc-500 text-xs tracking-[0.3em] uppercase">Neural Extraction Active</p>
                         </div>
 
-                        {/* Thinking Stream Output */}
                         <div className="w-full bg-black/40 border border-white/5 rounded-xl p-4 backdrop-blur-sm overflow-hidden flex flex-col items-start gap-2 h-[200px] transition-all duration-300">
                             <div className="flex items-center gap-2 w-full border-b border-white/5 pb-2 mb-1">
                                 <div className="w-1.5 h-1.5 rounded-full bg-tivit-red animate-pulse"></div>
@@ -114,7 +112,7 @@ export default function Dashboard() {
                                 ) : (
                                     <span className="text-zinc-700 italic">Initializing thought process...</span>
                                 )}
-                                <div className="h-4" /> {/* Spacer for scrolling */}
+                                <div className="h-4" />
                             </div>
                         </div>
                     </motion.div>
