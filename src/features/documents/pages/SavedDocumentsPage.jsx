@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Trash2, Eye, Download, Calendar, Search, Loader2, Lock, Unlock } from 'lucide-react';
 import ResultCard from '../../analysis/components/ResultCard';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 
 export default function SavedDocumentsPage() {
     const [documents, setDocuments] = useState([]);
