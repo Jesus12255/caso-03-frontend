@@ -5,7 +5,7 @@ import ResultsBoard from '../features/analysis/components/ResultsBoard';
 import { useAnalysis } from '../features/analysis/hooks/useAnalysis';
 
 export default function Dashboard() {
-    const { status, results, thinking, analyzeFiles, resetAnalysis } = useAnalysis();
+    const { status, results, thinking, error, analyzeFiles, resetAnalysis } = useAnalysis();
     const thinkingRef = useRef(null);
 
     const handleFilesSelected = (files) => {
@@ -70,6 +70,33 @@ export default function Dashboard() {
                             </span>
                             System Operational
                         </motion.div>
+                    </motion.div>
+                )}
+
+                {status === 'error' && (
+                    <motion.div
+                        key="error"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1.05 }}
+                        className="flex flex-col items-center justify-center p-8 max-w-lg text-center"
+                    >
+                        <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center mb-6 border border-red-500/20">
+                            <span className="text-4xl">⚠️</span>
+                        </div>
+                        <h3 className="text-2xl font-light text-white mb-2">Analysis Interrupted</h3>
+                        <p className="text-zinc-400 mb-8 leading-relaxed">
+                            {/* Detailed error if available, else generic */}
+                            We encountered an issue while processing your documents.
+                            <br />
+                            <span className="text-sm opacity-70 mt-2 block">{error || "The connection was lost or timed out."}</span>
+                        </p>
+                        <button
+                            onClick={resetAnalysis}
+                            className="px-6 py-2 bg-white text-black hover:bg-zinc-200 rounded-lg font-medium transition-colors flex items-center gap-2"
+                        >
+                            <span className="text-lg">↺</span> Try Again
+                        </button>
                     </motion.div>
                 )}
 

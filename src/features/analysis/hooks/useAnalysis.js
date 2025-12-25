@@ -1,25 +1,37 @@
 import { useState } from "react";
+import { API_URL } from "../../../config";
 
 export function useAnalysis() {
   const [status, setStatus] = useState("idle");
   const [thinking, setThinking] = useState("");
   const [results, setResults] = useState(null);
+  const [error, setError] = useState(null);
 
   const analyzeFiles = async (files) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
     try {
       setStatus("analyzing");
       setThinking("");
       setResults(null);
+      setError(null);
 
       const formData = new FormData();
       files.forEach((file) => formData.append("files", file));
 
-      const response = await fetch("http://localhost:8000/analyze/upload", {
+      // Use window.location.hostname to connect to backend on the same device
+      const apiUrl = `${API_URL}/analyze/upload`;
+
+      const response = await fetch(apiUrl, {
         method: "POST",
         body: formData,
+        signal: controller.signal
       });
 
-      if (!response.ok) throw new Error("Error al conectar con el backend");
+      clearTimeout(timeoutId);
+
+      if (!response.ok) throw new Error(`Server Error: ${response.status}`);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -34,7 +46,6 @@ export function useAnalysis() {
         buffer += chunk;
 
         const lines = buffer.split("\n");
-        // Keep the last line in the buffer if it's incomplete
         buffer = lines.pop();
 
         for (const line of lines) {
@@ -44,128 +55,90 @@ export function useAnalysis() {
 
             try {
               const data = JSON.parse(jsonStr);
-
-              if (data.thinking) {
-                setThinking((prev) => prev + data.thinking);
+              if (data.error) {
+                throw new Error(data.error);
               }
-
-              if (data.response) {
-                fullResponse += data.response;
-              }
+              if (data.thinking) setThinking((prev) => prev + data.thinking);
+              if (data.response) fullResponse += data.response;
             } catch (e) {
+              if (e.message && !e.message.includes("JSON")) {
+                // Propagate actual errors thrown above
+                throw e;
+              }
               console.error("Error parsing stream JSON", e);
             }
           }
         }
       }
 
-      // Process any remaining buffer
+      // Process remaining buffer
       if (buffer.trim().startsWith("data: ")) {
         try {
           const jsonStr = buffer.trim().slice(6);
           if (jsonStr !== "[DONE]") {
             const data = JSON.parse(jsonStr);
+            if (data.error) throw new Error(data.error);
             if (data.thinking) setThinking((prev) => prev + data.thinking);
             if (data.response) fullResponse += data.response;
           }
         } catch (e) {
-          console.error("Error parsing final stream buffer", e);
+          if (e.message && !e.message.includes("JSON")) throw e;
         }
       }
 
       try {
-        // Attempt to parse the accumulated response as JSON
         if (fullResponse.trim()) {
           const parsedResults = JSON.parse(fullResponse);
-
           let finalResults = [];
 
-          // Check for Strict "documents" structure
           if (parsedResults.documents && Array.isArray(parsedResults.documents)) {
             parsedResults.documents.forEach((doc, idx) => {
               let extractedFields = [];
-
-              // Add Summary
-              if (doc.summary) {
-                extractedFields.push({ label: "Summary", value: doc.summary });
-              }
-
-              // Flatten valid fields
+              if (doc.summary) extractedFields.push({ label: "Summary", value: doc.summary });
               if (doc.fields) {
                 Object.entries(doc.fields).forEach(([key, val]) => {
-                  let strVal = "";
-                  if (Array.isArray(val)) {
-                    strVal = val.join(", ");
-                  } else if (typeof val === 'object' && val !== null) {
-                    strVal = JSON.stringify(val);
-                  } else {
-                    strVal = String(val);
-                  }
-
-                  extractedFields.push({ label: key, value: strVal });
+                  extractedFields.push({ label: key, value: val });
                 });
               }
-
-              // Add Validation Info if not valid
-              if (doc.validation_status) {
-                extractedFields.push({ label: "Validation Status", value: doc.validation_status });
-              }
-              if (doc.validation_message) {
-                extractedFields.push({ label: "Validation Message", value: doc.validation_message });
-              }
-
               finalResults.push({
-                fileName: `Document ${doc.document_index || idx + 1}`,
+                fileName: doc.document_name || `Document ${doc.document_index || idx + 1}`,
                 detectedType: doc.type || "Document",
                 confidence: doc.validation_status === 'valid' ? 1.0 : 0.8,
                 fields: extractedFields
               });
             });
-          }
-          // Check for Multi-page structure: [{ filename, data: [{ page, content }] }]
-          else if (Array.isArray(parsedResults) && parsedResults.length > 0 && parsedResults[0].data && Array.isArray(parsedResults[0].data)) {
-            parsedResults.forEach(file => {
-              if (file.data && Array.isArray(file.data)) {
-                file.data.forEach(pageData => {
-                  finalResults.push({
-                    fileName: `${file.filename} (Page ${pageData.page})`,
-                    title: file.filename, // Keep original filename accessible
-                    pageNumber: pageData.page,
-                    detectedType: "Page Analysis",
-                    confidence: 1.0,
-                    fields: pageData.content // The content becomes the fields for the generic card renderer
-                  });
-                });
-              }
-            });
           } else {
-            // Standard/Fallback structure
+            // Fallback
             finalResults = Array.isArray(parsedResults) ? parsedResults : [parsedResults];
           }
-
           setResults(finalResults);
         } else {
-          console.warn("Empty response received");
-          setResults([]);
+          throw new Error("Received empty response from analysis");
         }
       } catch (e) {
-        console.warn("Failed to parse JSON, attempting Markdown parsing", e);
-
-        // Fallback: Parse Markdown text to structured data
+        console.warn("JSON Parse Failed, using Raw Text", e);
         const structuredData = parseMarkdownResponse(fullResponse);
         setResults([structuredData]);
       }
 
       setStatus("success");
     } catch (err) {
-      console.error(err);
+      console.error("Analysis Error:", err);
+      if (err.name === 'AbortError') {
+        setError("Request timed out. Please check your internet connection and try again.");
+      } else {
+        setError(err.message || "An unexpected error occurred during analysis.");
+      }
       setStatus("error");
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 
   const resetAnalysis = () => {
     setThinking("");
     setResults(null);
+    setError(null);
     setStatus("idle");
   };
 
@@ -173,6 +146,7 @@ export function useAnalysis() {
     status,
     thinking,
     results,
+    error,
     analyzeFiles,
     resetAnalysis,
   };

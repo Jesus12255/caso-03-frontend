@@ -1,9 +1,10 @@
 import { FileText, User, Settings, HelpCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function Header() {
     return (
         <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-tivit-dark/70 backdrop-blur-xl supports-[backdrop-filter]:bg-tivit-dark/50">
-            <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div className="max-w-7xl mx-auto px-6 h-auto md:h-16 py-3 md:py-0 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-0">
                 <div className="flex items-center gap-3">
                     <div className="relative flex items-center justify-center w-8 h-8">
                         <div className="absolute inset-0 bg-tivit-red blur-lg opacity-20 rounded-full"></div>
@@ -20,28 +21,31 @@ export default function Header() {
                     </div>
                 </div>
 
-                <nav className="flex items-center gap-1">
-                    <button className="flex items-center gap-2 px-3 md:px-4 py-2 text-sm font-medium text-tivit-muted hover:text-white transition-colors duration-300 rounded-lg hover:bg-white/5 group">
-                        <FileText size={16} className="group-hover:text-tivit-red transition-colors duration-300" />
-                        <span className="hidden md:inline">Ver mis documentos</span>
-                    </button>
-
-                    <button className="flex items-center gap-2 px-3 md:px-4 py-2 text-sm font-medium text-tivit-muted hover:text-white transition-colors duration-300 rounded-lg hover:bg-white/5 group">
-                        <User size={16} className="group-hover:text-tivit-red transition-colors duration-300" />
-                        <span className="hidden md:inline">Usuario</span>
-                    </button>
+                <div className="flex items-center gap-4">
+                    <nav className="flex items-center gap-2">
+                        <Link to="/" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg transition-all hover:scale-105 active:scale-95">
+                            <FileText size={16} className="text-tivit-red" />
+                            Analyze
+                        </Link>
+                        <Link to="/documents" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/5 rounded-lg transition-all hover:scale-105 active:scale-95">
+                            <FileText size={16} className="text-zinc-500 group-hover:text-tivit-red" />
+                            Documents
+                        </Link>
+                    </nav>
 
                     <div className="w-px h-5 bg-white/10 mx-2"></div>
 
-                    <button className="flex items-center justify-center w-9 h-9 text-tivit-muted hover:text-white transition-colors duration-300 rounded-lg hover:bg-white/5" title="Configuración">
-                        <Settings size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button className="flex items-center justify-center w-9 h-9 text-tivit-muted hover:text-white transition-colors duration-300 rounded-lg hover:bg-white/5" title="Configuración">
+                            <Settings size={18} />
+                        </button>
 
-                    <button className="flex items-center justify-center w-9 h-9 text-tivit-muted hover:text-white transition-colors duration-300 rounded-lg hover:bg-white/5" title="Ayuda">
-                        <HelpCircle size={18} />
-                    </button>
-                </nav>
+                        <button className="flex items-center justify-center w-9 h-9 text-tivit-muted hover:text-white transition-colors duration-300 rounded-lg hover:bg-white/5" title="Ayuda">
+                            <HelpCircle size={18} />
+                        </button>
+                    </div>
+                </div>
             </div>
-        </header>
+        </header >
     );
 }

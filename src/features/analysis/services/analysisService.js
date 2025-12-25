@@ -1,3 +1,5 @@
+import { API_URL } from '../../../config';
+
 export const analysisService = {
     /**
      * Saves the edited analysis results to the backend.
@@ -7,7 +9,7 @@ export const analysisService = {
     async saveAnalysisResults(data) {
 
         try {
-            const response = await fetch("http://localhost:8000/document/save", {
+            const response = await fetch(`${API_URL}/document/save`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

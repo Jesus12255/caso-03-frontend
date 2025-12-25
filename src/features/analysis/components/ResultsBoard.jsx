@@ -1,9 +1,19 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Save, RotateCcw, Check, Loader2, ShieldOff, Lock } from 'lucide-react';
+import { Sparkles, Save, RotateCcw, Check, Loader2, ShieldOff, Lock, Download } from 'lucide-react';
 import { useExtractEditor } from '../hooks/useExtractEditor';
 import ResultCard from './ResultCard';
 import EncryptionModal from '../../../components/ui/EncryptionModal';
+
+const ExportButton = ({ label, onClick }) => (
+    <button
+        onClick={onClick}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-400 bg-zinc-900 border border-white/5 rounded-md hover:text-white hover:border-white/20 transition-colors"
+    >
+        <Download className="w-3 h-3" />
+        {label}
+    </button>
+);
 
 export default function ResultsBoard({ results, onReset }) {
     const {
@@ -14,6 +24,7 @@ export default function ResultsBoard({ results, onReset }) {
         handleEncryptDocument,
         handleDecryptDocument,
         handleGlobalEncryption,
+        handleTitleChange,
         handleSave
     } = useExtractEditor(results);
 
@@ -62,6 +73,90 @@ export default function ResultsBoard({ results, onReset }) {
             // Global
             await handleGlobalEncryption(password, modal.mode === 'encrypt');
         }
+    };
+
+    const handleExport = (type) => {
+        if (!editableResults || editableResults.length === 0) return;
+
+        const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+        let content = '';
+        let mimeType = '';
+        let extension = '';
+
+        if (type === 'json') {
+            content = JSON.stringify(editableResults, null, 2);
+            mimeType = 'application/json';
+            extension = 'json';
+        } else if (type === 'txt') {
+            mimeType = 'text/plain';
+            extension = 'txt';
+            editableResults.forEach((doc, idx) => {
+                content += `DOCUMENT ${idx + 1}: ${doc.fileName}\n`;
+                content += `Type: ${doc.detectedType}\n`;
+                content += '='.repeat(40) + '\n';
+                doc.fields.forEach(field => {
+                    let valStr = typeof field.value === 'object' ? JSON.stringify(field.value, null, 2) : field.value;
+                    content += `${field.label}:\n${valStr}\n\n`;
+                });
+                content += '\n\n';
+            });
+        } else if (type === 'docx') {
+            mimeType = 'application/msword';
+            extension = 'doc';
+
+            // Generate HTML compatible with Word
+            let htmlContent = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head><meta charset='utf-8'><title>Export</title>
+                <style>body{font-family:Arial,sans-serif;} table{border-collapse:collapse;width:100%;margin-bottom:20px;} th,td{border:1px solid #000;padding:8px;text-align:left;} th{background-color:#eee;}</style>
+                </head><body>
+            `;
+
+            editableResults.forEach((doc, idx) => {
+                htmlContent += `<h1>Document ${idx + 1}: ${doc.fileName}</h1>`;
+                htmlContent += `<p><strong>Type:</strong> ${doc.detectedType}</p><hr/>`;
+
+                doc.fields.forEach(field => {
+                    htmlContent += `<h3>${field.label}</h3>`;
+
+                    if (Array.isArray(field.value) && field.value.length > 0 && typeof field.value[0] === 'object') {
+                        // Render Table
+                        htmlContent += `<table><thead><tr>`;
+                        const keys = Object.keys(field.value[0]);
+                        keys.forEach(k => htmlContent += `<th>${k}</th>`);
+                        htmlContent += `</tr></thead><tbody>`;
+
+                        field.value.forEach(row => {
+                            htmlContent += `<tr>`;
+                            keys.forEach(k => {
+                                let val = row[k];
+                                if (typeof val === 'object') val = JSON.stringify(val);
+                                htmlContent += `<td>${val || ''}</td>`;
+                            });
+                            htmlContent += `</tr>`;
+                        });
+                        htmlContent += `</tbody></table>`;
+                    } else if (typeof field.value === 'object') {
+                        htmlContent += `<pre>${JSON.stringify(field.value, null, 2)}</pre>`;
+                    } else {
+                        htmlContent += `<p>${field.value}</p>`;
+                    }
+                });
+                htmlContent += `<br style='page-break-before:always'/>`;
+            });
+            htmlContent += `</body></html>`;
+            content = htmlContent;
+        }
+
+        const blob = new Blob([content], { type: mimeType });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `analysis_export_${timestamp}.${extension}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
     };
 
     return (
@@ -168,6 +263,12 @@ export default function ResultsBoard({ results, onReset }) {
                     </div>
                 </div>
 
+                <div className="flex justify-end mb-6 gap-2">
+                    <ExportButton label="JSON" onClick={() => handleExport('json')} />
+                    <ExportButton label="TXT" onClick={() => handleExport('txt')} />
+                    <ExportButton label="DOCX" onClick={() => handleExport('docx')} />
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {editableResults.map((item, docIndex) => (
                         <ResultCard
@@ -177,6 +278,7 @@ export default function ResultsBoard({ results, onReset }) {
                             onValueChange={handleValueChange}
                             onDeleteField={handleDeleteField}
                             onToggleAnonymization={handleToggleClick}
+                            onTitleChange={handleTitleChange}
                         />
                     ))}
                 </div>
