@@ -2,8 +2,9 @@ import { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileCheck, Trash2, Shield, ShieldOff, Lock } from 'lucide-react';
 import SpotlightCard from '../../../components/ui/SpotlightCard';
+import ComplexFieldRenderer from './ComplexFieldRenderer';
 
-const ResultCard = memo(function ResultCard({ item, docIndex, onValueChange, onDeleteField, onToggleAnonymization }) {
+const ResultCard = memo(function ResultCard({ item, docIndex, onValueChange, onDeleteField, onToggleAnonymization, onTitleChange, isReadOnly }) {
     const displayName = item.fileName || `Document Analysis ${docIndex + 1}`;
     const displayType = item.detectedType || 'DATA';
     const displayConfidence = item.confidence != null ? item.confidence : 1.0;
@@ -24,9 +25,15 @@ const ResultCard = memo(function ResultCard({ item, docIndex, onValueChange, onD
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 flex items-center justify-center text-zinc-400 group-hover:text-tivit-red transition-colors duration-500 shadow-lg">
                             <FileCheck className="w-5 h-5" />
                         </div>
-                        <div className="overflow-hidden">
-                            <h3 className="text-white font-medium text-sm truncate max-w-[180px] tracking-wide" title={displayName}>{displayName}</h3>
-
+                        <div className="overflow-hidden flex-1">
+                            <input
+                                type="text"
+                                value={displayName}
+                                readOnly={isReadOnly}
+                                onChange={(e) => !isReadOnly && onTitleChange && onTitleChange(docIndex, e.target.value)}
+                                className={`bg-transparent border-none text-white font-medium text-sm w-full focus:outline-none rounded px-1 transition-all ${isReadOnly ? 'cursor-default' : 'focus:ring-1 focus:ring-tivit-red/50 hover:bg-white/5'}`}
+                                title={isReadOnly ? displayName : "Click to edit document name"}
+                            />
                         </div>
                     </div>
 
@@ -85,17 +92,28 @@ const ResultCard = memo(function ResultCard({ item, docIndex, onValueChange, onD
                                     </div>
 
                                     <div className="relative">
-                                        <textarea
-                                            value={isAnonymized ? '•'.repeat(Math.min(field.value.length, 24)) : field.value}
-                                            readOnly={isAnonymized}
-                                            onChange={(e) => !isAnonymized && onValueChange(docIndex, fieldIndex, e.target.value)}
-                                            className={`w-full bg-transparent text-sm font-light border-b py-1 focus:outline-none transition-colors resize-none field-sizing-content min-h-[28px] ${isAnonymized
-                                                ? 'text-indigo-300/50 border-indigo-500/20 cursor-not-allowed tracking-widest'
-                                                : 'text-zinc-200 border-white/5 focus:border-tivit-red/50 focus:bg-white/[0.02]'
-                                                }`}
-                                            rows={1}
-                                            style={{ fieldSizing: "content" }}
-                                        />
+                                        {typeof field.value === 'object' && field.value !== null ? (
+                                            <div className={`w-full bg-zinc-900/10 rounded-md border border-white/5 p-3 min-h-[28px] ${isAnonymized ? 'opacity-70' : ''}`}>
+                                                <ComplexFieldRenderer
+                                                    value={field.value}
+                                                    isAnonymized={isAnonymized}
+                                                    onChange={(!isAnonymized && onValueChange) ? (val) => onValueChange(docIndex, fieldIndex, val) : undefined}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <textarea
+                                                value={isAnonymized ? '•'.repeat(Math.min(String(field.value).length, 24)) : field.value}
+                                                readOnly={isAnonymized}
+                                                onChange={(e) => !isAnonymized && onValueChange(docIndex, fieldIndex, e.target.value)}
+                                                className={`w-full bg-transparent text-sm font-light border-b py-1 focus:outline-none transition-colors resize-none field-sizing-content min-h-[28px] ${isAnonymized
+                                                    ? 'text-indigo-300/50 border-indigo-500/20 cursor-not-allowed tracking-widest'
+                                                    : 'text-zinc-200 border-white/5 focus:border-tivit-red/50 focus:bg-white/[0.02]'
+                                                    }`}
+                                                rows={1}
+                                                style={{ fieldSizing: "content" }}
+                                            />
+                                        )}
+
                                         {isAnonymized && (
                                             <motion.div
                                                 initial={{ opacity: 0 }}

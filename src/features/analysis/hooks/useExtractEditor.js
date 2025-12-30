@@ -57,6 +57,15 @@ export function useExtractEditor(initialResults) {
         setSaveStatus('idle');
     }, []);
 
+    const handleTitleChange = useCallback((docIndex, newTitle) => {
+        setEditableResults(prev => {
+            const next = [...prev];
+            next[docIndex] = { ...next[docIndex], fileName: newTitle, document_name: newTitle };
+            return next;
+        });
+        setSaveStatus('idle');
+    }, []);
+
     const handleEncryptDocument = useCallback((docIndex, password) => {
         return new Promise((resolve, reject) => {
             const doc = editableResults[docIndex];
@@ -70,7 +79,12 @@ export function useExtractEditor(initialResults) {
                 console.log("Original Data:", JSON.parse(JSON.stringify(doc.fields)));
 
                 const encryptedFields = doc.fields.map(field => {
-                    const encryptedValue = CryptoJS.AES.encrypt(field.value, password).toString();
+                    // Stringify if object/array to preserve data
+                    let valToEncrypt = field.value;
+                    if (typeof field.value === 'object' && field.value !== null) {
+                        valToEncrypt = JSON.stringify(field.value);
+                    }
+                    const encryptedValue = CryptoJS.AES.encrypt(String(valToEncrypt), password).toString();
                     return {
                         ...field,
                         value: encryptedValue
@@ -119,7 +133,18 @@ export function useExtractEditor(initialResults) {
                         console.warn(`Failed to decrypt field: ${field.label}`);
                         throw new Error("Incorrect password");
                     }
-                    return { ...field, value: val };
+
+                    // Try to restore object structure
+                    let finalVal = val;
+                    try {
+                        if (val.startsWith('{') || val.startsWith('[')) {
+                            finalVal = JSON.parse(val);
+                        }
+                    } catch (e) {
+                        // Keep as string if parse fails
+                    }
+
+                    return { ...field, value: finalVal };
                 });
 
                 console.log("Decrypted Data:", JSON.parse(JSON.stringify(decryptedFields)));
@@ -170,19 +195,31 @@ export function useExtractEditor(initialResults) {
                             if (doc.isEncrypted) return doc;
 
                             console.log(`Encrypting ${doc.fileName}...`);
-                            const encryptedFields = doc.fields.map(field => ({
-                                ...field,
-                                value: CryptoJS.AES.encrypt(field.value, password).toString()
-                            }));
+                            const encryptedFields = doc.fields.map(field => {
+                                let valToEncrypt = field.value;
+                                if (typeof field.value === 'object' && field.value !== null) {
+                                    valToEncrypt = JSON.stringify(field.value);
+                                }
+                                return {
+                                    ...field,
+                                    value: CryptoJS.AES.encrypt(String(valToEncrypt), password).toString()
+                                };
+                            });
                             return { ...doc, fields: encryptedFields, isEncrypted: true, isAnonymized: true };
                         } else {
                             if (!doc.isEncrypted) return doc;
 
                             console.log(`Decrypting ${doc.fileName}...`);
-                            const decryptedFields = doc.fields.map(field => ({
-                                ...field,
-                                value: CryptoJS.AES.decrypt(field.value, password).toString(CryptoJS.enc.Utf8)
-                            }));
+                            const decryptedFields = doc.fields.map(field => {
+                                const bytes = CryptoJS.AES.decrypt(field.value, password);
+                                let val = bytes.toString(CryptoJS.enc.Utf8);
+                                try {
+                                    if (val.startsWith('{') || val.startsWith('[')) {
+                                        val = JSON.parse(val);
+                                    }
+                                } catch (e) { }
+                                return { ...field, value: val };
+                            });
                             return { ...doc, fields: decryptedFields, isEncrypted: false, isAnonymized: false };
                         }
                     });
@@ -223,6 +260,7 @@ export function useExtractEditor(initialResults) {
         handleEncryptDocument,
         handleDecryptDocument,
         handleGlobalEncryption,
+        handleTitleChange,
         handleSave
     };
 }
